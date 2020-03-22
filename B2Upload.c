@@ -189,13 +189,63 @@ dynamic_buffer_t* makeCurlGetReq(char* url, CURLcode* resp_p, char* authString)
 }
 
 
-dynamic_buffer_t* makeCurlPostReq(char* url, CURLcode* resp_p, char* data, struct curl_slist* chunkList)
+dynamic_buffer_t* makeCurlPostReq(CURL** curl_p, CURLcode* resp_p, char* data, struct curl_slist* chunkList)
 {
 	dynamic_buffer_t* ret = NULL;
 	CURL* curl;
 	CURLcode response = 0;
-	
 	// LOG_ERROR("ret->array: %s\n", ret->array);
+
+
+
+	if ((curl_p != NULL) && (*curl_p != NULL) && (data != NULL) )
+	{
+		ret = malloc(sizeof(dynamic_buffer_t));
+		if (ret != NULL)
+		{
+			memset((void*) ret, 0, sizeof(dynamic_buffer_t));
+			ret->array = malloc(1);
+			if (ret->array != NULL)
+			{
+				//curl = curl_easy_init();
+				curl = *curl_p;
+				if (curl != NULL)
+				{
+					//curl_easy_setopt(curl, CURLOPT_URL, url);
+					if (chunkList != NULL)
+					{
+						curl_easy_setopt(curl, CURLOPT_HTTPHEADER, chunkList);
+					}
+					//Don't need to check null.
+					curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
+					curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curlFillBufferDynamic);
+					curl_easy_setopt(curl, CURLOPT_WRITEDATA, ret);
+					response = curl_easy_perform(curl);
+					if (resp_p != NULL)
+					{
+						*resp_p = response;
+					}
+					//LOG_ERROR("cleaning up.\n");
+					//Not mine to clean.
+					//curl_easy_cleanup(curl);
+				}
+				else
+				{
+					LOG_ERROR("curl was null");
+					free(ret->array);
+					free(ret);
+					ret = NULL;
+				}
+			}
+			else
+			{
+				free(ret);
+				ret = NULL;
+			}
+		}
+	}
+
+
 	return ret;
 }
 
@@ -213,19 +263,13 @@ int main(int argc, char** argv, char** envp)
 	char* postUrlResponse = NULL;
 	char* postUrl = NULL;
 	char* postDataString = NULL;
+	char* postAuthTok = NULL;
 	char* cp;
 	memset((void*) BUFFER, 0, sizeof(BUFFER));
 	snprintf(BUFFER, sizeof(BUFFER), "%s:%s", B2UploadKeyId, B2UploadSecret);
 	curl = curl_easy_init();
 	if (curl != NULL)
 	{
-		// curl_easy_setopt(curl, CURLOPT_USERPWD, BUFFER);
-
-		// curl_easy_setopt(curl, CURLOPT_URL, 
-		// 	"https://api.backblazeb2.com/b2api/v2/b2_authorize_account");
-		// curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curlFillBuffer);
-		// BUFFEROffset = 0;
-		// response = curl_easy_perform(curl);
 		dynamic_buffer_t* dArray = makeCurlGetReq("https://api.backblazeb2.com/b2api/v2/b2_authorize_account",
 												&response, BUFFER);
 		if (response != CURLE_OK)
@@ -235,7 +279,7 @@ int main(int argc, char** argv, char** envp)
 		else
 		{
 			if (dArray != NULL && dArray->array != NULL && dArray->index > 0)
-			fullAuthString = (char*) dArray->array;//getDynamicStringCopy(BUFFER);
+			fullAuthString = (char*) dArray->array;
 			free(dArray);
 			dArray = NULL;
 			if (fullAuthString != NULL)
@@ -258,6 +302,7 @@ int main(int argc, char** argv, char** envp)
 						{
 							LOG_ERROR("apiUrl: \n%s\n", apiUrl);
 							curl_easy_setopt(curl, CURLOPT_USERPWD, NULL);
+							//curl_easy_reset(curl);
 
 							snprintf(BUFFER, sizeof(BUFFER), "%s%s%s", apiUrl, B2apiNameVerURL, "b2_get_upload_url");
 							LOG_ERROR("get upload url: %s\n", BUFFER);
@@ -269,55 +314,61 @@ int main(int argc, char** argv, char** envp)
 							snprintf(BUFFER, sizeof(BUFFER), "%s: %s", "Authorization", authTok);
 							LOG_ERROR("auth header: %s\n", BUFFER);
 							chunk = curl_slist_append(chunk, BUFFER);
-							curl_easy_setopt(curl, CURLOPT_HTTPHEADER, chunk);
+							//curl_easy_setopt(curl, CURLOPT_HTTPHEADER, chunk);
 
 							snprintf(BUFFER, sizeof(BUFFER), "{\"bucketId\": \"%s\"}", bucketId);
 							postDataString = getDynamicStringCopy(BUFFER);
 							if (postDataString != NULL)
 							{
-								curl_easy_setopt(curl, CURLOPT_POSTFIELDS, postDataString);
+								//curl_easy_setopt(curl, CURLOPT_POSTFIELDS, postDataString);
 								memset((void*) BUFFER, 0, sizeof(BUFFER));
 								LOG_ERROR("postDataString: %s\n", postDataString);
 
 								//curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L); 
-
-
-								BUFFEROffset = 0;
-								response = curl_easy_perform(curl);
-								if (response != CURLE_OK)
+								//dynamic_buffer_t* makeCurlPostReq(CURL** curl_p, CURLcode* resp_p, char* data, struct curl_slist* chunkList)
+								dArray = makeCurlPostReq(&curl, &response, postDataString, chunk);
+								curl_slist_free_all(chunk);
+								chunk = NULL;
+								if (dArray != NULL)
 								{
-									LOG_ERROR("curl_easy_perform() failed: %s\n", curl_easy_strerror(response));
-								}
-								else
-								{
-									//Got back valid response
-									long responseCode;
-									LOG_ERROR("curl call was ok\n");
-									curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode);
-									curl_slist_free_all(chunk);
-									chunk = NULL;
-									LOG_ERROR("response code; Code: %d\n", responseCode);
-									if (responseCode < 300 && responseCode > 199)
+
+									//response = curl_easy_perform(curl);
+									if (response != CURLE_OK)
 									{
-										//Valid url recieved.
-										postUrlResponse = getDynamicStringCopy(BUFFER);
-										if (postUrlResponse != NULL)
-										{
-											memset((void*) BUFFER, 0, sizeof(BUFFER));
-											LOG_ERROR("postUrlResponse: %s\n", postUrlResponse);
-											postUrl = getValueFromResp("postUrl", postUrlResponse);
-											if (postUrl != NULL)
-											{
-												LOG_ERROR("postUrl: %s\n", postUrl);
-											}
-
-
-											free(postUrlResponse);
-										}
+										LOG_ERROR("curl_easy_perform() failed: %s\n", curl_easy_strerror(response));
 									}
 									else
 									{
-										LOG_ERROR("buffer after failed get upload url: %s\n", BUFFER);
+										//Got back valid response
+										long responseCode;
+										LOG_ERROR("curl call was ok\n");
+										curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode);
+
+										LOG_ERROR("response code; Code: %d\n", responseCode);
+										if (responseCode < 300 && responseCode > 199)
+										{
+											//Valid url recieved.
+											postUrlResponse = dArray->array;
+											free(dArray);
+											if (postUrlResponse != NULL)
+											{
+												memset((void*) BUFFER, 0, sizeof(BUFFER));
+												LOG_ERROR("postUrlResponse: %s\n", postUrlResponse);
+												postUrl = getValueFromResp("uploadUrl", postUrlResponse);
+												if (postUrl != NULL)
+												{
+													LOG_ERROR("postUrl: %s\n", postUrl);
+													postAuthTok = getValueFromResp("authorizationToken", postUrlResponse);
+												}
+
+
+												free(postUrlResponse);
+											}
+										}
+										else
+										{
+											LOG_ERROR("buffer after failed get upload url: %s\n", BUFFER);
+										}
 									}
 								}
 								free(postDataString);
@@ -326,6 +377,8 @@ int main(int argc, char** argv, char** envp)
 							free(apiUrl);
 							apiUrl = NULL;
 						}
+						//Removed as reused in final upload call.
+						//free(bucketId);
 					}
 				
 					free(authTok);
@@ -335,6 +388,26 @@ int main(int argc, char** argv, char** envp)
 				free(fullAuthString);
 				fullAuthString = NULL;
 			}
+		}
+		if (postAuthTok != NULL)
+		{
+			//Means everything has completed and I have what I need to perform upload.
+
+			curl_easy_reset(curl);
+			curl_easy_setopt(curl, CURLOPT_URL, postUrl);
+			chunk = curl_slist_append(chunk, "Accept:");
+			memset((void*) BUFFER, 0, sizeof(BUFFER));
+			//snprintf(BUFFER, sizeof(BUFFER), "%s");
+
+			free(postAuthTok);
+			postAuthTok = NULL;
+			free(bucketId);
+			bucketId = NULL;
+		}
+		if (postUrl != NULL)
+		{
+			free(postUrl);
+			postUrl = NULL;
 		}
 
 		LOG_ERROR("cleaning up.\n");
