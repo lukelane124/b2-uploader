@@ -20,7 +20,8 @@ FILE *inFile = NULL;
 
 
 const char* B2UploadKeyId = "00148165f5a47f20000000009";
-const char* B2UploadSecret = "K001s0e//xC2qV0q/Y8nFBh3bwTbVkg";
+char B2UploadSecret[50];
+const char* b2UploadSec1 = "085f4048015902475b4263661e3b5d080f1559002362407f443b742d260e15";
 const char* B2apiNameVerURL = "/b2api/v2/";
 
 const char* INJEST_BUCKET = "com-km4lvw-injest";
@@ -35,6 +36,36 @@ typedef struct
 
 char* calcSha1Sum(char* filepath);
 
+
+/*
+memset((void*)secret, 0, sizeof(secret));
+	LOG_DEBUG("decoding secret\n");
+	for (size_t count = 0; count < sizeof(secret); count++) {
+        sscanf(pos, "%2hhx", &secret[count]);
+        secret[count] = (secret[count] ^ (UsageCopyWrite[(count)%strlen(UsageCopyWrite)]));
+        pos += 2;
+        if (!*pos)
+        {
+        	break;
+        }
+    }*/
+
+
+void DecodeSecret(void)
+{
+	char c;
+	memset((void*) B2UploadSecret, 0, sizeof(B2UploadSecret));
+	char *pos = b2UploadSec1;
+	for (size_t count = 0; count < sizeof(B2UploadSecret); count++) {
+        sscanf(pos, "%2hhx", &B2UploadSecret[count]);
+        B2UploadSecret[count] = (B2UploadSecret[count] ^ (UsageCopyWrite[(count)%strlen(UsageCopyWrite)]));
+        pos += 2;
+        if (!*pos)
+        {
+        	break;
+        }
+    }
+}
 
 void Usage(void)
 {
@@ -320,6 +351,7 @@ int main(int argc, char** argv, char** envp)
 	char* sha1Sum = NULL;
 	char* cp;
 	progName = argv[0];
+	DecodeSecret();
 	if (argc < 2)
 	{
 		Usage();
