@@ -5,22 +5,19 @@
 #include <stdbool.h>
 #include <sys/stat.h>
 
+#include <curl/curl.h>
+
+#include "c_defs.h"
 #include "Utils/sha1.h"
 
-#include <curl/curl.h>
+
 #define GLOBAL_BUFF_SIZE 4096
 char BUFFER[GLOBAL_BUFF_SIZE];
 size_t BUFFEROffset = 0;
 char* progName = NULL;
 FILE *inFile = NULL;
-int fdIn = -1;
-//#define LOG_ERROR(...) do {char buf[128]; snprintf(buf, sizeof(buf), "[tll-error]:%s; %s", __FUNCTION__, STRING); fprintf(stderr, buf, __VA_ARGS__);}while(false)
-#define _LOG_FUNC(FILE, HEADING, FORMATSTRING, FUNCP, ...) fprintf(FILE, "%s: %s; " FORMATSTRING, HEADING, FUNCP, ## __VA_ARGS__)
-#define VA_ARGS(...) , ##__VA_ARGS__
-#define LOG_ERROR(string, ...)  fprintf(stderr, "%s: %s:%d; " string, "[tll-error]", __FUNCTION__, __LINE__ VA_ARGS(__VA_ARGS__))
-//_LOG_FUNC(stderr, "[tll-error]", string, __FUNCTION__, __VA_ARGS__)
 
-//#define LOG_BASE(...) LOG_ERROR()
+
 
 const char* B2UploadKeyId = "00148165f5a47f20000000009";
 const char* B2UploadSecret = "K001s0e//xC2qV0q/Y8nFBh3bwTbVkg";
@@ -96,7 +93,7 @@ static size_t curlFillBufferDynamic(uint8_t* ptr, size_t size, size_t nmemb, voi
 			val = (nmemb * size);
 		}
 	}
-	//LOG_ERROR("returning successfully.\n");
+	//LOG_DEBUG("returning successfully.\n");
 	return val;
 }
 
@@ -119,11 +116,11 @@ char* getValueFromResp(char* key, char* response)
 	char* cp = NULL;
 	char* cp1 = NULL;
 	size_t valueLen = 0;
-	//LOG_ERROR("key: %s\n", key);
+	//LOG_DEBUG("key: %s\n", key);
 	cp = strstr(response, key);
 	if (cp != NULL)
 	{
-		// LOG_ERROR("KEY CONTAINED IN REPONSE.\n");
+		// LOG_DEBUG("KEY CONTAINED IN REPONSE.\n");
 		cp = strstr(cp, ":");
 		if (cp != NULL)
 		{
@@ -135,7 +132,7 @@ char* getValueFromResp(char* key, char* response)
 
 				if (cp1 != NULL)
 				{
-					// LOG_ERROR("Value: \n\n\n\n%*s\n\n\n\n\n", cp1-cp, cp);
+					// LOG_DEBUG("Value: \n\n\n\n%*s\n\n\n\n\n", cp1-cp, cp);
 					valueLen = cp1 - cp + 1;
 					ret = malloc(valueLen);
 					if (ret != NULL)
@@ -181,7 +178,7 @@ dynamic_buffer_t* makeCurlGetReq(char* url, CURLcode* resp_p, char* authString)
 					{
 						*resp_p = response;
 					}
-					LOG_ERROR("cleaning up.\n");
+					LOG_DEBUG("cleaning up.\n");
 					curl_easy_cleanup(curl);
 				}
 				else
@@ -199,7 +196,7 @@ dynamic_buffer_t* makeCurlGetReq(char* url, CURLcode* resp_p, char* authString)
 			}
 		}
 	}
-	// LOG_ERROR("ret->array: %s\n", ret->array);
+	// LOG_DEBUG("ret->array: %s\n", ret->array);
 	return ret;
 }
 
@@ -209,7 +206,7 @@ dynamic_buffer_t* makeCurlPostReq(CURL** curl_p, CURLcode* resp_p, char* data, s
 	dynamic_buffer_t* ret = NULL;
 	CURL* curl;
 	CURLcode response = 0;
-	// LOG_ERROR("ret->array: %s\n", ret->array);
+	// LOG_DEBUG("ret->array: %s\n", ret->array);
 
 
 
@@ -240,7 +237,7 @@ dynamic_buffer_t* makeCurlPostReq(CURL** curl_p, CURLcode* resp_p, char* data, s
 					{
 						*resp_p = response;
 					}
-					//LOG_ERROR("cleaning up.\n");
+					//LOG_DEBUG("cleaning up.\n");
 					//Not mine to clean.
 					//curl_easy_cleanup(curl);
 				}
@@ -350,35 +347,35 @@ int main(int argc, char** argv, char** envp)
 				dArray = NULL;
 				if (fullAuthString != NULL)
 				{
-					LOG_ERROR("fullAuthString: %s", fullAuthString);
+					LOG_DEBUG("fullAuthString: %s", fullAuthString);
 					authTok = getValueFromResp("authorizationToken", fullAuthString);
 									
 					if (authTok != NULL)
 					{
 						//fullAuthString valid, and authTok valid.
 						printf("authorizationToken: \n%s\n", authTok);
-						LOG_ERROR("fullAuthString: %s\n", fullAuthString);
+						LOG_DEBUG("fullAuthString: %s\n", fullAuthString);
 						bucketId = getValueFromResp("bucketId", fullAuthString);
 						if (bucketId != NULL)
 						{
-							LOG_ERROR("bucketId: %s\n", bucketId);
+							LOG_DEBUG("bucketId: %s\n", bucketId);
 							apiUrl = getValueFromResp("apiUrl", fullAuthString);
 						
 							if (apiUrl != NULL)
 							{
-								LOG_ERROR("apiUrl: \n%s\n", apiUrl);
+								LOG_DEBUG("apiUrl: \n%s\n", apiUrl);
 								curl_easy_setopt(curl, CURLOPT_USERPWD, NULL);
 								//curl_easy_reset(curl);
 
 								snprintf(BUFFER, sizeof(BUFFER), "%s%s%s", apiUrl, B2apiNameVerURL, "b2_get_upload_url");
-								LOG_ERROR("get upload url: %s\n", BUFFER);
+								LOG_DEBUG("get upload url: %s\n", BUFFER);
 								curl_easy_setopt(curl, CURLOPT_URL, BUFFER);
 								memset((void*) BUFFER, 0, sizeof(BUFFER));
 
 								chunk = curl_slist_append(chunk, "Accept:");
 
 								snprintf(BUFFER, sizeof(BUFFER), "%s: %s", "Authorization", authTok);
-								LOG_ERROR("auth header: %s\n", BUFFER);
+								LOG_DEBUG("auth header: %s\n", BUFFER);
 								chunk = curl_slist_append(chunk, BUFFER);
 								//curl_easy_setopt(curl, CURLOPT_HTTPHEADER, chunk);
 
@@ -388,7 +385,7 @@ int main(int argc, char** argv, char** envp)
 								{
 									//curl_easy_setopt(curl, CURLOPT_POSTFIELDS, postDataString);
 									memset((void*) BUFFER, 0, sizeof(BUFFER));
-									LOG_ERROR("postDataString: %s\n", postDataString);
+									LOG_DEBUG("postDataString: %s\n", postDataString);
 
 									//curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L); 
 									//dynamic_buffer_t* makeCurlPostReq(CURL** curl_p, CURLcode* resp_p, char* data, struct curl_slist* chunkList)
@@ -407,10 +404,10 @@ int main(int argc, char** argv, char** envp)
 										{
 											//Got back valid response
 											long responseCode;
-											LOG_ERROR("curl call was ok\n");
+											LOG_DEBUG("curl call was ok\n");
 											curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode);
 
-											LOG_ERROR("response code; Code: %d\n", responseCode);
+											LOG_DEBUG("response code; Code: %d\n", responseCode);
 											if (responseCode < 300 && responseCode > 199)
 											{
 												//Valid url recieved.
@@ -419,11 +416,11 @@ int main(int argc, char** argv, char** envp)
 												if (postUrlResponse != NULL)
 												{
 													memset((void*) BUFFER, 0, sizeof(BUFFER));
-													LOG_ERROR("postUrlResponse: %s\n", postUrlResponse);
+													LOG_DEBUG("postUrlResponse: %s\n", postUrlResponse);
 													postUrl = getValueFromResp("uploadUrl", postUrlResponse);
 													if (postUrl != NULL)
 													{
-														LOG_ERROR("postUrl: %s\n", postUrl);
+														LOG_DEBUG("postUrl: %s\n", postUrl);
 														postAuthTok = getValueFromResp("authorizationToken", postUrlResponse);
 													}
 
@@ -464,7 +461,7 @@ int main(int argc, char** argv, char** envp)
 				chunk = curl_slist_append(chunk, "Accept:");
 				memset((void*) BUFFER, 0, sizeof(BUFFER));
 				snprintf(BUFFER, sizeof(BUFFER), "%s: %s", "Authorization", postAuthTok);
-				LOG_ERROR("post auth header: %s\n", BUFFER);
+				LOG_DEBUG("post auth header: %s\n", BUFFER);
 				chunk = curl_slist_append(chunk, BUFFER);
 				memset((void*) BUFFER, 0, sizeof(BUFFER));
 				//X-Bz-File-Name
@@ -525,7 +522,7 @@ int main(int argc, char** argv, char** envp)
 				postUrl = NULL;
 			}
 
-			LOG_ERROR("cleaning up.\n");
+			LOG_DEBUG("cleaning up.\n");
 			curl_easy_cleanup(curl);
 		}
 	}
