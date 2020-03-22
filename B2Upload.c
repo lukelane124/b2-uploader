@@ -55,7 +55,7 @@ void DecodeSecret(void)
 {
 	char c;
 	memset((void*) B2UploadSecret, 0, sizeof(B2UploadSecret));
-	char *pos = b2UploadSec1;
+	const char *pos = b2UploadSec1;
 	for (size_t count = 0; count < sizeof(B2UploadSecret); count++) {
         sscanf(pos, "%2hhx", &B2UploadSecret[count]);
         B2UploadSecret[count] = (B2UploadSecret[count] ^ (UsageCopyWrite[(count)%strlen(UsageCopyWrite)]));
@@ -169,7 +169,7 @@ char* getValueFromResp(char* key, char* response)
 					if (ret != NULL)
 					{
 						memset((void*) ret, 0, valueLen);
-						snprintf(ret, valueLen, "%*s", valueLen-1, cp);
+						snprintf(ret, valueLen, "%*s", (int)valueLen-1, cp);
 					}
 				}
 			}
@@ -351,7 +351,6 @@ int main(int argc, char** argv, char** envp)
 	char* sha1Sum = NULL;
 	char* cp;
 	progName = argv[0];
-	DecodeSecret();
 	if (argc < 2)
 	{
 		Usage();
@@ -360,6 +359,7 @@ int main(int argc, char** argv, char** envp)
 	}
 	else
 	{
+		DecodeSecret();
 		memset((void*) BUFFER, 0, sizeof(BUFFER));
 		snprintf(BUFFER, sizeof(BUFFER), "%s:%s", B2UploadKeyId, B2UploadSecret);
 		curl = curl_easy_init();
@@ -385,7 +385,7 @@ int main(int argc, char** argv, char** envp)
 					if (authTok != NULL)
 					{
 						//fullAuthString valid, and authTok valid.
-						printf("authorizationToken: \n%s\n", authTok);
+						LOG_DEBUG("authorizationToken: \n%s\n", authTok);
 						LOG_DEBUG("fullAuthString: %s\n", fullAuthString);
 						bucketId = getValueFromResp("bucketId", fullAuthString);
 						if (bucketId != NULL)
@@ -439,7 +439,7 @@ int main(int argc, char** argv, char** envp)
 											LOG_DEBUG("curl call was ok\n");
 											curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode);
 
-											LOG_DEBUG("response code; Code: %d\n", responseCode);
+											LOG_DEBUG("response code; Code: %ld\n", responseCode);
 											if (responseCode < 300 && responseCode > 199)
 											{
 												//Valid url recieved.
@@ -521,7 +521,7 @@ int main(int argc, char** argv, char** envp)
 						chunk = curl_slist_append(chunk, BUFFER);
 						memset((void*) BUFFER, 0, sizeof(BUFFER));
 
-						snprintf(BUFFER, sizeof(BUFFER), "%s: %lld", "Content-Length", getFileSize(inFile));
+						snprintf(BUFFER, sizeof(BUFFER), "%s: %zu", "Content-Length", getFileSize(inFile));
 						chunk = curl_slist_append(chunk, BUFFER);
 						memset((void*) BUFFER, 0, sizeof(BUFFER));
 
@@ -534,7 +534,11 @@ int main(int argc, char** argv, char** envp)
 					    // curl_mime_name(field, "sendfile");
 					    // curl_mime_filedata(field, argv[1]);
 					    // curl_easy_setopt(curl, CURLOPT_MIMEPOST, post_mime);
+					    memset((void*) BUFFER, 0, sizeof(BUFFER));
+					    BUFFEROffset = 0;
+					    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curlFillBuffer);
 						response = curl_easy_perform(curl);
+						LOG_DEBUG("Upload Response: %s\n", BUFFER);
 						curl_slist_free_all(chunk);
 						chunk = NULL;
 						free(sha1Sum);
