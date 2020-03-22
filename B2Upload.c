@@ -14,7 +14,7 @@ size_t BUFFEROffset = 0;
 
 const char* B2UploadKeyId = "00148165f5a47f20000000009";
 const char* B2UploadSecret = "K001s0e//xC2qV0q/Y8nFBh3bwTbVkg";
-const char* B2apiNameVerURL = "/b2api/v5/"
+const char* B2apiNameVerURL = "/b2api/v2/";
 
 const char* INJEST_BUCKET = "com-km4lvw-injest";
 
@@ -63,6 +63,45 @@ char* getDynamicStringCopy(char* ntString)
 	return ret;
 }
 
+char* getValueFromResp(char* key, char* response)
+{
+	char* ret = NULL;
+	char* cp = NULL;
+	char* cp1 = NULL;
+	size_t valueLen = 0;
+	//LOG_ERROR("key: %s\n", key);
+	cp = strstr(response, key);
+	if (cp != NULL)
+	{
+		// LOG_ERROR("KEY CONTAINED IN REPONSE.\n");
+		cp = strstr(cp, ":");
+		if (cp != NULL)
+		{
+			cp = strstr(cp, "\"");
+			cp++;
+			if (cp != NULL)
+			{
+				cp1 = strstr(cp, "\"");
+
+				if (cp1 != NULL)
+				{
+					// LOG_ERROR("Value: \n\n\n\n%*s\n\n\n\n\n", cp1-cp, cp);
+					valueLen = cp1 - cp + 1;
+					ret = malloc(valueLen);
+					if (ret != NULL)
+					{
+						memset((void*) ret, 0, valueLen);
+						snprintf(ret, valueLen, "%*s", valueLen-1, cp);
+					}
+				}
+			}
+		}
+	}
+	return ret;
+}
+
+
+
 int main(int argc, char** argv, char** envp)
 {
 	CURL* curl;
@@ -70,9 +109,11 @@ int main(int argc, char** argv, char** envp)
 	struct curl_slist *chunk = NULL;
 	char* fullAuthString = NULL;
 	char* authTok = NULL;
+	char* bucketId = NULL;
 	char* apiUrl = NULL;
 	char* postUrlResponse = NULL;
 	char* postUrl = NULL;
+	char* postDataString = NULL;
 	char* cp;
 	memset((void*) BUFFER, 0, sizeof(BUFFER));
 	snprintf(BUFFER, sizeof(BUFFER), "%s:%s", B2UploadKeyId, B2UploadSecret);
@@ -93,93 +134,101 @@ int main(int argc, char** argv, char** envp)
 		else
 		{
 			fullAuthString = getDynamicStringCopy(BUFFER);
-			LOG_ERROR("fullAuthString: %s", fullAuthString);
+			//LOG_ERROR("fullAuthString: %s", fullAuthString);
 			if (fullAuthString != NULL)
 			{
-				cp = strstr(BUFFER, "authorizationToken");
-				if (cp != NULL)
-				{	
-					cp = strstr(cp, ":");
-					cp++;
-					cp = strtok(cp, "\"");
-					cp = strtok(NULL, "\"");
-					if (cp != NULL)
+				authTok = getValueFromResp("authorizationToken", BUFFER);
+								
+				if (authTok != NULL)
+				{
+					//fullAuthString valid, and authTok valid.
+					printf("authorizationToken: \n%s\n", authTok);
+					memset((void*) BUFFER, 0, sizeof(BUFFER));
+					memcpy((void*) BUFFER, fullAuthString, strlen(fullAuthString));
+
+					bucketId = getValueFromResp("bucketId", BUFFER);
+					if (bucketId != NULL)
 					{
-						//sscanf(cp, "%s", BUFFER);
-						snprintf(BUFFER, sizeof(BUFFER), "%s", cp);
-						printf("authorizationToken: \n%s\n", BUFFER);
-						authTok = getDynamicStringCopy(BUFFER);
-						if (authTok != NULL)
+					
+						apiUrl = getValueFromResp("apiUrl", BUFFER);
+					
+						if (apiUrl != NULL)
 						{
-							//fullAuthString valid, and authTok valid.
+							printf("apiUrl: \n%s\n", apiUrl);
+							curl_easy_setopt(curl, CURLOPT_USERPWD, NULL);
+
+							snprintf(BUFFER, sizeof(BUFFER), "%s%s%s", apiUrl, B2apiNameVerURL, "b2_get_upload_url");
+							LOG_ERROR("get upload url: %s\n", BUFFER);
+							curl_easy_setopt(curl, CURLOPT_URL, BUFFER);
 							memset((void*) BUFFER, 0, sizeof(BUFFER));
-							memcpy((void*) BUFFER, fullAuthString, strlen(fullAuthString));
 
-							//Get api url from authString.
-							cp = strstr(BUFFER, "apiUrl");
-							if (cp != NULL)
-							{	
-								cp = strstr(cp, ":");
-								cp++;
-								cp = strtok(cp, "\"");
-								cp = strtok(NULL, "\"");
-								if (cp != NULL)
+							chunk = curl_slist_append(chunk, "Accept:");
+
+							snprintf(BUFFER, sizeof(BUFFER), "%s: %s", "Authorization", authTok);
+							LOG_ERROR("auth header: %s\n", BUFFER);
+							chunk = curl_slist_append(chunk, BUFFER);
+							curl_easy_setopt(curl, CURLOPT_HTTPHEADER, chunk);
+
+							snprintf(BUFFER, sizeof(BUFFER), "{\"bucketId\": \"%s\"}", bucketId);
+							postDataString = getDynamicStringCopy(BUFFER);
+							if (postDataString != NULL)
+							{
+								curl_easy_setopt(curl, CURLOPT_POSTFIELDS, postDataString);
+								memset((void*) BUFFER, 0, sizeof(BUFFER));
+								LOG_ERROR("postDataString: %s\n", postDataString);
+
+								//curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L); 
+
+
+								BUFFEROffset = 0;
+								response = curl_easy_perform(curl);
+								if (response != CURLE_OK)
 								{
-									//sscanf(cp, "%s", BUFFER);
-									snprintf(BUFFER, sizeof(BUFFER), "%s", cp);
-									printf("apiUrl: \n%s\n", BUFFER);
-									apiUrl = getDynamicStringCopy(BUFFER);
-									if (apiUrl != NULL)
+									LOG_ERROR("curl_easy_perform() failed: %s\n", curl_easy_strerror(response));
+								}
+								else
+								{
+									//Got back valid response
+									long responseCode;
+									LOG_ERROR("curl call was ok\n");
+									curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode);
+									curl_slist_free_all(chunk);
+									chunk = NULL;
+									LOG_ERROR("response code; Code: %d\n", responseCode);
+									if (responseCode < 300 && responseCode > 199)
 									{
-										curl_easy_setopt(curl, CURLOPT_USERPWD, NULL);
-
-										snprintf(BUFFER, sizeof(BUFFER), "%s%s/%s", apiUrl, B2apiNameVerURL, "b2_get_upload_url");
-										curl_easy_setopt(curl, CURLOPT_URL, BUFFER);
-										memset((void*) BUFFER, 0, sizeof(BUFFER));
-
-										chunk = curl_slist_append(chunk, "Accept:");
-
-										snprintf(BUFFER, sizeof(BUFFER) "%s: %s", "Authorization", authTok);
-										chunk = curl_slist_append(chunk, BUFFER);
-										curl_easy_setopt(curl, CURLOPT_HTTPHEADER, chunk);
-
-										memset((void*) BUFFER, 0, sizeof(BUFFER));
-										response = curl_easy_perform();
-
-										curl_slist_free_all(chunk);
-										chunk = NULL;
-										if (response != CURLE_OK)
+										//Valid url recieved.
+										postUrlResponse = getDynamicStringCopy(BUFFER);
+										if (postUrlResponse != NULL)
 										{
-											LOG_ERROR("curl_easy_perform() failed: %s\n", curl_easy_strerror(response));
-										}
-										else
-										{
-											//Got back valid response.
-											long responseCode;
-											curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode);
-											if (responseCode < 300 && responseCode > 199)
+											memset((void*) BUFFER, 0, sizeof(BUFFER));
+											LOG_ERROR("postUrlResponse: %s\n", postUrlResponse);
+											postUrl = getValueFromResp("postUrl", postUrlResponse);
+											if (postUrl != NULL)
 											{
-												//Valid url recieved.
-												postUrlResponse = getDynamicStringCopy(BUFFER);
-												if (postUrlResponse != NULL)
-												{
-													memset((void*) BUFFER, 0, sizeof(BUFFER));
-
-													
-													
-													free(postUrlResponse);
-												}
+												LOG_ERROR("postUrl: %s\n", postUrl);
 											}
-										}
 
-										free(apiUrl);
+
+											free(postUrlResponse);
+										}
+									}
+									else
+									{
+										LOG_ERROR("buffer after failed get upload url: %s\n", BUFFER);
 									}
 								}
+								free(postDataString);
 							}
-							free(authTok);
-							authTok = NULL;
+
+							free(apiUrl);
+							apiUrl = NULL;
 						}
 					}
+				
+					free(authTok);
+					authTok = NULL;
+					
 				}
 				free(fullAuthString);
 				fullAuthString = NULL;
