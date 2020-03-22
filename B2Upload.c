@@ -9,7 +9,12 @@
 char BUFFER[GLOBAL_BUFF_SIZE];
 size_t BUFFEROffset = 0;
 
-#define LOG_ERROR(...) fprintf(stderr, __VA_ARGS__)
+//#define LOG_ERROR(...) do {char buf[128]; snprintf(buf, sizeof(buf), "[tll-error]:%s; %s", __FUNCTION__, STRING); fprintf(stderr, buf, __VA_ARGS__);}while(false)
+#define _LOG_FUNC(FILE, HEADING, FORMATSTRING, FUNCP, ...) fprintf(FILE, "%s: %s; " FORMATSTRING, HEADING, FUNCP, ## __VA_ARGS__)
+#define VA_ARGS(...) , ##__VA_ARGS__
+#define LOG_ERROR(string, ...)  fprintf(stderr, "%s: %s:%d; " string, "[tll-error]", __FUNCTION__, __LINE__ VA_ARGS(__VA_ARGS__))
+//_LOG_FUNC(stderr, "[tll-error]", string, __FUNCTION__, __VA_ARGS__)
+
 //#define LOG_BASE(...) LOG_ERROR()
 
 const char* B2UploadKeyId = "00148165f5a47f20000000009";
@@ -17,6 +22,12 @@ const char* B2UploadSecret = "K001s0e//xC2qV0q/Y8nFBh3bwTbVkg";
 const char* B2apiNameVerURL = "/b2api/v2/";
 
 const char* INJEST_BUCKET = "com-km4lvw-injest";
+
+typedef struct 
+{
+	void* array;
+	size_t index;
+}dynamic_buffer_t;
 
 void setBuffer(uint8_t* data, size_t len)
 {
@@ -48,6 +59,30 @@ static size_t curlFillBuffer(uint8_t* ptr, size_t size, size_t nmemb, void* stre
 	BUFFEROffset += val;
 	//printf("%*s", size*nmemb, ptr);
 	return size*nmemb;
+}
+
+static size_t curlFillBufferDynamic(uint8_t* ptr, size_t size, size_t nmemb, void* stream)
+{
+	size_t val = 0;
+	void* allocStatus = NULL;
+	uint8_t* u8p;
+	dynamic_buffer_t* dBuffer = NULL;
+	if (stream != NULL)
+	{
+		dBuffer = (dynamic_buffer_t*) stream;
+		allocStatus = realloc(dBuffer->array, (dBuffer->index + (size * nmemb) + 1));
+		if (allocStatus != NULL)
+		{
+			dBuffer->array = allocStatus;
+			memcpy((void*) &dBuffer->array[dBuffer->index], ptr, nmemb * size);
+			dBuffer->index += (nmemb * size);
+			// u8p = (uint8_t*) &dBuffer->array[dBuffer->index];
+			// u8p = 0;
+			val = (nmemb * size);
+		}
+	}
+	//LOG_ERROR("returning successfully.\n");
+	return val;
 }
 
 char* getDynamicStringCopy(char* ntString)
@@ -101,6 +136,70 @@ char* getValueFromResp(char* key, char* response)
 }
 
 
+dynamic_buffer_t* makeCurlGetReq(char* url, CURLcode* resp_p, char* authString)
+{
+	dynamic_buffer_t* ret = NULL;
+	CURL* curl;
+	CURLcode response = 0;
+	uint8_t* u8p;
+	if (url != NULL)
+	{
+		ret = malloc(sizeof(dynamic_buffer_t));
+		if (ret != NULL)
+		{
+			memset((void*) ret, 0, sizeof(dynamic_buffer_t));
+			ret->array = malloc(1);
+			if (ret->array != NULL)
+			{
+				curl = curl_easy_init();
+				if (curl != NULL)
+				{
+					curl_easy_setopt(curl, CURLOPT_URL, url);
+					if (authString != NULL)
+					{
+						curl_easy_setopt(curl, CURLOPT_USERPWD, authString);
+					}
+					curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curlFillBufferDynamic);
+					curl_easy_setopt(curl, CURLOPT_WRITEDATA, ret);
+					response = curl_easy_perform(curl);
+					if (resp_p != NULL)
+					{
+						*resp_p = response;
+					}
+					LOG_ERROR("cleaning up.\n");
+					curl_easy_cleanup(curl);
+				}
+				else
+				{
+					LOG_ERROR("curl was null");
+					free(ret->array);
+					free(ret);
+					ret = NULL;
+				}
+			}
+			else
+			{
+				free(ret);
+				ret = NULL;
+			}
+		}
+	}
+	// LOG_ERROR("ret->array: %s\n", ret->array);
+	return ret;
+}
+
+
+dynamic_buffer_t* makeCurlPostReq(char* url, CURLcode* resp_p, char* data, struct curl_slist* chunkList)
+{
+	dynamic_buffer_t* ret = NULL;
+	CURL* curl;
+	CURLcode response = 0;
+	
+	// LOG_ERROR("ret->array: %s\n", ret->array);
+	return ret;
+}
+
+
 
 int main(int argc, char** argv, char** envp)
 {
@@ -120,41 +219,44 @@ int main(int argc, char** argv, char** envp)
 	curl = curl_easy_init();
 	if (curl != NULL)
 	{
-		curl_easy_setopt(curl, CURLOPT_USERPWD, BUFFER);
+		// curl_easy_setopt(curl, CURLOPT_USERPWD, BUFFER);
 
-		curl_easy_setopt(curl, CURLOPT_URL, 
-			"https://api.backblazeb2.com/b2api/v2/b2_authorize_account");
-		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curlFillBuffer);
-		BUFFEROffset = 0;
-		response = curl_easy_perform(curl);
+		// curl_easy_setopt(curl, CURLOPT_URL, 
+		// 	"https://api.backblazeb2.com/b2api/v2/b2_authorize_account");
+		// curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curlFillBuffer);
+		// BUFFEROffset = 0;
+		// response = curl_easy_perform(curl);
+		dynamic_buffer_t* dArray = makeCurlGetReq("https://api.backblazeb2.com/b2api/v2/b2_authorize_account",
+												&response, BUFFER);
 		if (response != CURLE_OK)
 		{
 			LOG_ERROR("curl_easy_perform() failed: %s\n", curl_easy_strerror(response));
 		}
 		else
 		{
-			fullAuthString = getDynamicStringCopy(BUFFER);
-			//LOG_ERROR("fullAuthString: %s", fullAuthString);
+			if (dArray != NULL && dArray->array != NULL && dArray->index > 0)
+			fullAuthString = (char*) dArray->array;//getDynamicStringCopy(BUFFER);
+			free(dArray);
+			dArray = NULL;
 			if (fullAuthString != NULL)
 			{
-				authTok = getValueFromResp("authorizationToken", BUFFER);
+				LOG_ERROR("fullAuthString: %s", fullAuthString);
+				authTok = getValueFromResp("authorizationToken", fullAuthString);
 								
 				if (authTok != NULL)
 				{
 					//fullAuthString valid, and authTok valid.
 					printf("authorizationToken: \n%s\n", authTok);
-					memset((void*) BUFFER, 0, sizeof(BUFFER));
-					memcpy((void*) BUFFER, fullAuthString, strlen(fullAuthString));
-
-					bucketId = getValueFromResp("bucketId", BUFFER);
+					LOG_ERROR("fullAuthString: %s\n", fullAuthString);
+					bucketId = getValueFromResp("bucketId", fullAuthString);
 					if (bucketId != NULL)
 					{
-					
-						apiUrl = getValueFromResp("apiUrl", BUFFER);
+						LOG_ERROR("bucketId: %s\n", bucketId);
+						apiUrl = getValueFromResp("apiUrl", fullAuthString);
 					
 						if (apiUrl != NULL)
 						{
-							printf("apiUrl: \n%s\n", apiUrl);
+							LOG_ERROR("apiUrl: \n%s\n", apiUrl);
 							curl_easy_setopt(curl, CURLOPT_USERPWD, NULL);
 
 							snprintf(BUFFER, sizeof(BUFFER), "%s%s%s", apiUrl, B2apiNameVerURL, "b2_get_upload_url");
