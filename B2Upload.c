@@ -7,6 +7,7 @@
 
 #include <curl/curl.h>
 
+#include "Utils/Encoding.h"
 #include "c_defs.h"
 #include "Utils/sha1.h"
 
@@ -69,7 +70,7 @@ void DecodeSecret(void)
 
 void Usage(void)
 {
-	printf("%s\n%s <filepath for upload>\n", UsageCopyWrite, progName);
+	printf("%s\nUsage:\n\t%s <filepath for upload>\n\n", UsageCopyWrite, progName);
 }
 
 void setBuffer(uint8_t* data, size_t len)
@@ -339,6 +340,7 @@ int main(int argc, char** argv, char** envp)
 	CURLcode response = 0;
 	curl_mime *post_mime = NULL;
   	curl_mimepart *field = NULL;
+  	char* tempString = NULL;
 	struct curl_slist *chunk = NULL;
 	char* fullAuthString = NULL;
 	char* authTok = NULL;
@@ -354,7 +356,7 @@ int main(int argc, char** argv, char** envp)
 	if (argc < 2)
 	{
 		Usage();
-		LOG_ERROR("Filename not available");
+		LOG_ERROR("Filename not available\n");
 		ret = 1;
 	}
 	else
@@ -497,7 +499,21 @@ int main(int argc, char** argv, char** envp)
 				chunk = curl_slist_append(chunk, BUFFER);
 				memset((void*) BUFFER, 0, sizeof(BUFFER));
 				//X-Bz-File-Name
-				snprintf(BUFFER, sizeof(BUFFER), "%s: %s", "X-Bz-File-Name", argv[1]);
+				LOG_DEBUG("Calling urlEncode\n");
+				tempString = urlEncode(argv[1], strlen(argv[1]));
+				LOG_DEBUG("urlEncode returned.\n");
+				if (tempString != NULL)
+				{
+					LOG_DEBUG("urlEncodedString: %s\n", tempString);
+					snprintf(BUFFER, sizeof(BUFFER), "%s: %s", "X-Bz-File-Name", tempString);	
+					free(tempString);
+					tempString = NULL;
+				}
+				else
+				{
+					snprintf(BUFFER, sizeof(BUFFER), "%s: %s", "X-Bz-File-Name", argv[0]);	
+				}
+				
 				chunk = curl_slist_append(chunk, BUFFER);
 				memset((void*) BUFFER, 0, sizeof(BUFFER));
 
