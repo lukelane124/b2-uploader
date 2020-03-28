@@ -11,7 +11,11 @@ OBF-SOURCE= \
 all: $(UPLOADER-SRC)
 	$(CC) $(UPLOADER-SRC) -lcurl -lpthread -o B2Uploader
 
-.phony: Obfuscator
+release: $(UPLOADER-SRC)
+	$(CC) $(UPLOADER-SRC) -lcurl -lpthread -DRELEASE -o B2Uploader
+
+
+.phony: Obfuscator release
 
 Obfuscator: stringObs.c
 	$(CC) stringObs.c -o Obfuscator

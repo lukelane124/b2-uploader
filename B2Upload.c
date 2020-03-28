@@ -32,21 +32,6 @@ typedef struct
 
 char* calcSha1Sum(char* filepath);
 
-
-/*
-memset((void*)secret, 0, sizeof(secret));
-	LOG_DEBUG("decoding secret\n");
-	for (size_t count = 0; count < sizeof(secret); count++) {
-        sscanf(pos, "%2hhx", &secret[count]);
-        secret[count] = (secret[count] ^ (UsageCopyWrite[(count)%strlen(UsageCopyWrite)]));
-        pos += 2;
-        if (!*pos)
-        {
-        	break;
-        }
-    }*/
-
-
 void DecodeSecret(void)
 {
 	char c;
@@ -330,7 +315,7 @@ size_t getFileSize(FILE* file)
 
 int main(int argc, char** argv, char** envp)
 {
-	int ret = 0;
+	int ret = -1;
 	CURL* curl;
 	CURLcode response = 0;
 	curl_mime *post_mime = NULL;
@@ -508,7 +493,7 @@ int main(int argc, char** argv, char** envp)
 				}
 				else
 				{
-					snprintf(BUFFER, sizeof(BUFFER), "%s: %s", "X-Bz-File-Name", argv[0]);	
+					snprintf(BUFFER, sizeof(BUFFER), "%s: %s", "X-Bz-File-Name", argv[1]);	
 				}
 				
 				chunk = curl_slist_append(chunk, BUFFER);
@@ -555,7 +540,16 @@ int main(int argc, char** argv, char** envp)
 						curl_slist_free_all(chunk);
 						chunk = NULL;
 						free(sha1Sum);
+						if (response == 200)
+						{
+							ret = 0;
+						}
 					}
+				}
+				else
+				{
+					LOG_ERROR("\n\nFile: \"%s\"\tWas not found.\n\n", argv[1]);
+					ret = 2;
 				}
 
 
@@ -564,6 +558,11 @@ int main(int argc, char** argv, char** envp)
 				postAuthTok = NULL;
 				free(bucketId);
 				bucketId = NULL;
+			}
+			else
+			{
+				LOG_ERROR("User key: %s, not authorized for upload on bucket: %s\n", B2UploadKeyId, INJEST_BUCKET);
+				ret = 3;
 			}
 			if (postUrl != NULL)
 			{
