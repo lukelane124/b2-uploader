@@ -318,6 +318,7 @@ int main(int argc, char** argv, char** envp)
 	int ret = -1;
 	CURL* curl;
 	CURLcode response = 0;
+	long serverResp = 0;
 	curl_mime *post_mime = NULL;
   	curl_mimepart *field = NULL;
   	char* tempString = NULL;
@@ -527,6 +528,7 @@ int main(int argc, char** argv, char** envp)
 						curl_easy_setopt(curl, CURLOPT_POST, 1L);
 						curl_easy_setopt(curl, CURLOPT_READFUNCTION, readFileCallback);
 						curl_easy_setopt(curl, CURLOPT_READDATA, inFile);
+						curl_easy_setopt(curl, CURLINFO_RESPONSE_CODE, &serverResp);
 						// post_mime = curl_mime_init(curl);
 						// field = curl_mime_addpart(post_mime);
 					    // curl_mime_name(field, "sendfile");
@@ -540,7 +542,8 @@ int main(int argc, char** argv, char** envp)
 						curl_slist_free_all(chunk);
 						chunk = NULL;
 						free(sha1Sum);
-						if (response == 200)
+						LOG_DEBUG("reponse code: %ld", serverResp);
+						if (response == CURLE_OK && serverResp == 0)
 						{
 							ret = 0;
 						}
