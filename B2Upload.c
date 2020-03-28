@@ -10,6 +10,7 @@
 #include "Utils/Encoding.h"
 #include "c_defs.h"
 #include "Utils/sha1.h"
+#include "SecretStrings.h"
 
 
 #define GLOBAL_BUFF_SIZE 4096
@@ -19,14 +20,8 @@ char* progName = NULL;
 FILE *inFile = NULL;
 
 
-
-const char* B2UploadKeyId = "00148165f5a47f20000000009";
 char B2UploadSecret[50];
-const char* b2UploadSec1 = "085f4048015902475b4263661e3b5d080f1559002362407f443b742d260e15";
 const char* B2apiNameVerURL = "/b2api/v2/";
-
-const char* INJEST_BUCKET = "com-km4lvw-injest";
-
 const char* UsageCopyWrite = "Copyright: Tommy Lane (L&L Operations) 2020";
 
 typedef struct 
@@ -363,6 +358,7 @@ int main(int argc, char** argv, char** envp)
 	{
 		DecodeSecret();
 		memset((void*) BUFFER, 0, sizeof(BUFFER));
+		LOG_DEBUG("Upload scret: %s", B2UploadSecret);
 		snprintf(BUFFER, sizeof(BUFFER), "%s:%s", B2UploadKeyId, B2UploadSecret);
 		curl = curl_easy_init();
 		if (curl != NULL)
@@ -372,6 +368,7 @@ int main(int argc, char** argv, char** envp)
 			if (response != CURLE_OK)
 			{
 				LOG_ERROR("curl_easy_perform() failed: %s\n", curl_easy_strerror(response));
+				ret = -1;
 			}
 			else
 			{
