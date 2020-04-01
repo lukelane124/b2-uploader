@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <sys/stat.h>
+#include <pwd.h>
+#include <unistd.h>
 
 #include <curl/curl.h>
 
@@ -32,14 +34,46 @@ typedef struct
 
 char* calcSha1Sum(char* filepath);
 
+
+char* GetUserPassword(void)
+{
+	char* ret = NULL;
+	char buffer[1024];
+	memset((void*) buffer, 0, sizeof(buffer));
+
+	//fprintf(stdout, "Please enter a password you would trust to keep your secrets safe: ");
+	//fgets(buffer, sizeof(buffer), stdin);
+	ret = getpass("Please enter a password you would trust to keep your secrets safe: ");
+	if (strlen(ret) == 127)
+	{
+		fprintf(stderr, "Hey, do you work for some three letter agency? If so use something more secure than this.\nYoumust use less then 127 characters.\n");
+	}
+	else
+	{
+		snprintf(buffer, sizeof(buffer), "%s", ret);
+		fprintf(stdout, "\n");
+		ret = malloc((strlen(buffer) + 1));
+		if (ret != NULL)
+		{
+			snprintf(ret, (strlen(buffer) + 1), "%s", buffer);
+		}
+		else
+		{
+			fprintf(stderr, "Memory allocation error. Please close chrome and try again.\n");
+		}
+	}
+	return ret;
+}
+
 void DecodeSecret(void)
 {
 	char c;
+	char* userPassword = GetUserPassword();
 	memset((void*) B2UploadSecret, 0, sizeof(B2UploadSecret));
 	const char *pos = b2UploadSec1;
 	for (size_t count = 0; count < sizeof(B2UploadSecret); count++) {
         sscanf(pos, "%2hhx", &B2UploadSecret[count]);
-        B2UploadSecret[count] = (B2UploadSecret[count] ^ (UsageCopyWrite[(count)%strlen(UsageCopyWrite)]));
+        B2UploadSecret[count] = (B2UploadSecret[count] ^ (userPassword[(count)%strlen(userPassword)]));
         pos += 2;
         if (!*pos)
         {
