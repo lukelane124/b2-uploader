@@ -43,7 +43,7 @@ char* GetUserPassword(void)
 
 	//fprintf(stdout, "Please enter a password you would trust to keep your secrets safe: ");
 	//fgets(buffer, sizeof(buffer), stdin);
-	ret = getpass("Please enter a password you would trust to keep your secrets safe: ");
+	ret = getpass("Please enter the password you trusted to keep your secrets safe: ");
 	if (strlen(ret) == 127)
 	{
 		fprintf(stderr, "Hey, do you work for some three letter agency? If so use something more secure than this.\nYoumust use less then 127 characters.\n");
